@@ -1,20 +1,52 @@
-import { createRoot } from 'react-dom/client';
-import './style.css' 
-const div = document.createElement('div');
-div.id = '__root';
-document.body.appendChild(div);
+import { profileData } from "@src/profileData";
 
-const rootContainer = document.querySelector('#__root');
-if (!rootContainer) throw new Error("Can't find Content root element");
-const root = createRoot(rootContainer);
-root.render(
-  <div className='absolute bottom-0 left-0 text-lg text-black bg-amber-400 z-50'  >
-    content script <span className='your-class'>loaded</span>
-  </div>
-);
-
-try {
-  console.log('content script loaded');
-} catch (e) {
-  console.error(e);
+// Check if post contains any keyword
+function containsKeyword(text: string, keywords: string[]): boolean {
+  return keywords.some((keyword) =>
+    text.toLowerCase().includes(keyword.toLowerCase())
+  );
 }
+
+// Scan LinkedIn search results
+function scanSearchResultsAndSend() {
+  const posts = document.querySelectorAll(
+    '.entity-result__summary, .update-components-text, .artdeco-card p, span[dir="ltr"]'
+  );
+  
+  const matchedPosts: any[] = [];
+  const allKeywords = [...profileData.skills, ...profileData.preferences];
+
+  let matchCount = 0;
+
+  posts.forEach((post) => {
+    const text = post.textContent?.trim() || "";
+
+    if (containsKeyword(text, allKeywords)) {
+      // Try to find a valid parent link
+      const postElement = post.closest("a") as HTMLAnchorElement;
+      const url = postElement?.href || "No URL found";
+
+      matchedPosts.push({
+        snippet: text.slice(0, 200),
+        url,
+        timestamp: new Date().toISOString(),
+      });
+
+      matchCount++;
+      if (matchCount >= 2) return; // Stop after 2
+    }
+  });
+
+  if (matchedPosts.length > 0) {
+    console.log("✅ Found matched posts:", matchedPosts);
+    chrome.runtime.sendMessage({ type: "MATCHED_POSTS_DIRECT", data: matchedPosts });
+  } else {
+    console.log("ℹ️ No matched posts found.");
+  }
+}
+
+// Delay scanning to allow LinkedIn search content to load
+setTimeout(() => {
+  console.log("🔍 Scanning LinkedIn search results...");
+  scanSearchResultsAndSend();
+}, 5000);

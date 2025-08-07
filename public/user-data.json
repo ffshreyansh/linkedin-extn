@@ -1,0 +1,28 @@
+{
+  "user": {
+    "name": "Shreyansh Kumar",
+    "job_title": "Full Stack Web Developer",
+    "skills": [
+      "JavaScript",
+      "React",
+      "Next.js",
+      "Node.js",
+      "MongoDB",
+      "Tailwind CSS",
+      "REST APIs"
+    ],
+    "preferences": {
+      "interested_in": ["Remote jobs", "Freelance gigs", "Open source contributions"],
+      "post_types": ["Job Opportunity", "Project Collaboration", "Tech Events"]
+    },
+    "tools": [
+      "VS Code",
+      "GitHub",
+      "Postman",
+      "Figma",
+      "Vercel",
+      "Chrome DevTools"
+    ],
+    "additional_instructions": "Prioritize posts related to React/Next.js freelance work or remote full-time roles."
+  }
+}
