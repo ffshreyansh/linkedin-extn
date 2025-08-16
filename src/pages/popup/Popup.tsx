@@ -1,54 +1,107 @@
 import { useEffect, useState } from "react";
 import logo from "@assets/img/logo.svg";
 import { profileData } from "@src/profileData";
+import PostCard from "@src/components/PostCard";
+
+interface Author {
+  name: string;
+  title: string;
+  profileUrl: string;
+  imageUrl: string;
+}
+
+interface LinkedInPost {
+  id: string;
+  content: string;
+  author: Author;
+  postUrl: string;
+  timestamp: string;
+  likes: number;
+  comments: number;
+  shares: number;
+  matchedKeywords: string[];
+  snippet: string;
+}
 
 export default function Popup() {
   const [linkedinConnected, setLinkedinConnected] = useState(false);
   const [checking, setChecking] = useState(false);
+  const [matchedPosts, setMatchedPosts] = useState<LinkedInPost[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [lastScanTime, setLastScanTime] = useState<string>("");
+  const [activeTab, setActiveTab] = useState<"scan" | "posts">("scan");
 
   useEffect(() => {
-  // Check LinkedIn connection status
-  if (chrome?.storage?.local) {
-    chrome.storage.local.get(["linkedinConnected", "matchedPosts"], (result) => {
-      if (result.linkedinConnected) {
-        setLinkedinConnected(true);
-      }
+    // Check LinkedIn connection status and load posts
+    if (chrome?.storage?.local) {
+      chrome.storage.local.get(
+        ["linkedinConnected", "matchedPosts", "lastScanTime"],
+        (result) => {
+          if (result.linkedinConnected) {
+            setLinkedinConnected(true);
+          }
 
-      // ✅ Log the matched posts
-      if (result.matchedPosts && Array.isArray(result.matchedPosts)) {
-        console.log("📄 Matched Posts:");
-        result.matchedPosts.forEach((post, index) => {
-          console.log(`\n🔹 Post ${index + 1}:`);
-          console.log("📝 Snippet:", post.snippet);
-          console.log("🔗 URL:", post.url);
-          console.log("⏱ Timestamp:", post.timestamp);
-        });
-      } else {
-        console.log("ℹ️ No matched posts found yet.");
-      }
-    });
-  } else {
-    console.error("❌ chrome.storage.local is not available");
-  }
-}, []);
+          // Load matched posts
+          if (result.matchedPosts && Array.isArray(result.matchedPosts)) {
+            setMatchedPosts(result.matchedPosts);
+            console.log("� Loaded Posts:", result.matchedPosts);
 
-useEffect(() => {
-  chrome.runtime.onMessage.addListener((message) => {
-    if (message.type === "EXPORT_JSON" && message.data) {
-      const json = JSON.stringify(message.data, null, 2);
-      const blob = new Blob([json], { type: "application/json" });
-      const url = URL.createObjectURL(blob);
+            // Switch to posts tab if we have posts
+            if (result.matchedPosts.length > 0) {
+              setActiveTab("posts");
+            }
+          }
 
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = "linkedin_matched_posts.json";
-      a.click();
-      URL.revokeObjectURL(url);
+          if (result.lastScanTime) {
+            setLastScanTime(result.lastScanTime);
+          }
+        }
+      );
+    } else {
+      console.error("❌ chrome.storage.local is not available");
     }
-  });
-}, []);
+  }, []);
 
+  useEffect(() => {
+    // Listen for new posts from content script
+    const messageListener = (message: any) => {
+      if (
+        (message.type === "MATCHED_POSTS_DIRECT" ||
+          message.type === "POSTS_FOUND") &&
+        message.data
+      ) {
+        setMatchedPosts(message.data);
+        setLoading(false);
+        if (message.data.length > 0) {
+          setActiveTab("posts");
+        }
 
+        // Save to storage
+        chrome.storage.local.set({
+          matchedPosts: message.data,
+          lastScanTime: new Date().toISOString(),
+        });
+      }
+
+      if (message.type === "EXPORT_JSON" && message.data) {
+        const json = JSON.stringify(message.data, null, 2);
+        const blob = new Blob([json], { type: "application/json" });
+        const url = URL.createObjectURL(blob);
+
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = "linkedin_matched_posts.json";
+        a.click();
+        URL.revokeObjectURL(url);
+      }
+    };
+
+    chrome.runtime.onMessage.addListener(messageListener);
+
+    return () => {
+      chrome.runtime.onMessage.removeListener(messageListener);
+    };
+  }, []);
 
   const handleLinkedInConnect = async () => {
     setChecking(true);
@@ -67,20 +120,98 @@ useEffect(() => {
     });
   };
 
-const handleScan = () => {
-  const allKeywords = [...profileData.skills, ...profileData.preferences];
-  const searchQuery = encodeURIComponent(allKeywords[0]); // ✅ only the first keyword
-  chrome.runtime.sendMessage({
-    type: "GO_TO_LINKEDIN_SEARCH",
-    query: searchQuery,
-  });
-};
+  const handleScan = () => {
+    setLoading(true);
+    setMatchedPosts([]); // Clear previous posts
 
+    const allKeywords = [
+      ...profileData.skills,
+      ...profileData.preferences,
+      ...profileData.tools,
+    ];
+    const searchQuery = encodeURIComponent(allKeywords[0]); // Use the first keyword
 
+    chrome.runtime.sendMessage({
+      type: "GO_TO_LINKEDIN_SEARCH",
+      query: searchQuery,
+    });
+  };
 
+  // Add test function to show mock posts
+  const handleShowTestPosts = () => {
+    const mockPosts: LinkedInPost[] = [
+      {
+        id: "test_1",
+        content:
+          "Looking for a React developer with experience in TypeScript and Next.js. Remote position available. Great opportunity to work with cutting-edge technology!",
+        author: {
+          name: "Sarah Johnson",
+          title: "Senior Tech Recruiter at Tech Corp",
+          profileUrl: "https://linkedin.com/in/sarah-johnson",
+          imageUrl:
+            "https://www.gravatar.com/avatar/00000000000000000000000000000000?d=mp&f=y",
+        },
+        postUrl: "https://linkedin.com/posts/sarah-johnson-123",
+        timestamp: new Date().toISOString(),
+        likes: 45,
+        comments: 12,
+        shares: 8,
+        matchedKeywords: ["React", "TypeScript", "Next.js"],
+        snippet:
+          "Looking for a React developer with experience in TypeScript and Next.js. Remote position available...",
+      },
+      {
+        id: "test_2",
+        content:
+          "Just shipped a new feature using React and CSS animations. The power of modern frontend development never ceases to amaze me! Check out our live demo.",
+        author: {
+          name: "Mike Chen",
+          title: "Frontend Developer at StartupXYZ",
+          profileUrl: "https://linkedin.com/in/mike-chen",
+          imageUrl:
+            "https://www.gravatar.com/avatar/11111111111111111111111111111111?d=mp&f=y",
+        },
+        postUrl: "https://linkedin.com/posts/mike-chen-456",
+        timestamp: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(),
+        likes: 89,
+        comments: 23,
+        shares: 15,
+        matchedKeywords: ["React", "CSS", "Frontend"],
+        snippet:
+          "Just shipped a new feature using React and CSS animations. The power of modern frontend development...",
+      },
+    ];
+
+    setMatchedPosts(mockPosts);
+    setActiveTab("posts");
+    chrome.storage.local.set({
+      matchedPosts: mockPosts,
+      lastScanTime: new Date().toISOString(),
+    });
+  };
+
+  const handleOpenPost = (url: string) => {
+    chrome.tabs.create({ url, active: true });
+  };
+
+  const handleClearPosts = () => {
+    setMatchedPosts([]);
+    chrome.storage.local.remove(["matchedPosts", "lastScanTime"]);
+    setActiveTab("scan");
+  };
+
+  const formatLastScanTime = (timestamp: string) => {
+    if (!timestamp) return "";
+    try {
+      const date = new Date(timestamp);
+      return `Last scan: ${date.toLocaleTimeString()}`;
+    } catch {
+      return "";
+    }
+  };
 
   return (
-    <div className="w-full rounded-lg bg-gray-100 shadow-lg p-4 font-sans text-sm">
+    <div className="w-96 rounded-lg bg-gray-100 shadow-lg font-sans text-sm">
       {/* Header */}
       <div className="flex items-center gap-2 mb-4">
         <img src={logo} alt="Indy AI" className="h-6 w-6 rounded-full" />
@@ -105,8 +236,19 @@ const handleScan = () => {
           <p className="text-gray-500 text-xs">shreyanshkumar1403@gmail.com</p>
         </div>
       </div>
-      <button onClick={handleScan} className="cursor-pointer">
+      <button
+        onClick={handleScan}
+        className="cursor-pointer w-full bg-blue-600 text-white py-2 px-4 rounded-lg mb-2"
+      >
         Find Relevant Posts
+      </button>
+
+      {/* Test button for demo */}
+      <button
+        onClick={handleShowTestPosts}
+        className="cursor-pointer w-full bg-green-600 text-white py-2 px-4 rounded-lg text-sm"
+      >
+        Show Test Posts (Demo)
       </button>
       {/* Scanning */}
       <div className="mt-4">

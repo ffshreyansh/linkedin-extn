@@ -17,9 +17,14 @@
   "icons": {
     "128": "icon-128.png"
   },
-  "permissions": ["storage","cookies", "https://www.linkedin.com/*", "scripting"],
+  "permissions": ["storage", "cookies", "tabs", "scripting"],
   "host_permissions": ["https://www.linkedin.com/*"],
-  
+
+  "background": {
+    "service_worker": "src/pages/background/index.js",
+    "type": "module"
+  },
+
   "content_scripts": [
     {
       "matches": ["https://www.linkedin.com/*"],
