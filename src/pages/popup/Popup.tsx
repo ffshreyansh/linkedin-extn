@@ -83,6 +83,12 @@ export default function Popup() {
         });
       }
 
+      if (message.type === "SCRAPING_ERROR") {
+        setLoading(false);
+        console.error("Scraping error:", message.message);
+        // You could show an error message to the user here
+      }
+
       if (message.type === "EXPORT_JSON" && message.data) {
         const json = JSON.stringify(message.data, null, 2);
         const blob = new Blob([json], { type: "application/json" });
